@@ -439,7 +439,18 @@ const statsInterval = setInterval(() => {
               case 'ping': {
                 const latency = Date.now() - message.createdTimestamp;
                 const uptime = formatUptime(Date.now() - startTime);
-                await message.channel.send(`\`\`\`\n~ Bot's Status\n\`\`\`\`\`\`js\nLatency = <(${latency}ms)>\nUptime = <(${uptime})>\n\`\`\``);
+                await message.channel.send(`
+\`\`\`
+~ NXTINDIA BOT STATUS
+\`\`\`js
+Host     = <(https://www.nxtindia.me)>
+Runtime  = <(Node.js v21)>
+Latency  = <(${latency}ms)>
+Uptime   = <(${uptime})>
+
+Status   = <(ONLINE 🟢)>
+\`\`\`
+`);
                 break;
               }
 
