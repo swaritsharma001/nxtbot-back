@@ -166,7 +166,7 @@ route.post("/utr", verifyToken, async (req,res)=>{
 
 route.post("/presence", verifyToken, async (req, res) => {
   const { id, presence } = req.body;
-  console.log(id, presence)
+  //console.log(id, presence)
   const userId = req.user.id;
 
   try {
@@ -191,6 +191,34 @@ route.post("/presence", verifyToken, async (req, res) => {
     }
 
     return res.status(200).send({ success: true, message: "Presence updated. Restart bot to apply changes." });
+  } catch (err) {
+    return res.status(500).send({ success: false, message: err.message });
+  }
+});
+
+route.post("/prefix", verifyToken, async (req, res) => {
+  const { id, prefix } = req.body;
+  
+  const userId = req.user.id;
+
+  try {
+    if (!id || !prefix) {
+      return res.status(400).send({ success: false, message: "Bot ID and prefix are required" });
+    }
+
+    const user = await User.findOne({ _id: userId });
+    if (!user) return res.status(404).send({ success: false, message: "User not found" });
+
+    if (!user.isPremium) {
+      return res.status(403).send({ success: false, message: "BUY PREMIUM TO UPDATE prefix. JUST RS 100." });
+    }
+
+    const bot = await Bot.findOne({ _id: id, owner: userId });
+    if (!bot) return res.status(404).send({ success: false, message: "Bot not found" });
+
+    await Bot.findOneAndUpdate({ _id: id, owner: userId }, { prefix });
+
+    return res.status(200).send({ success: true, message: "prefix updated. Restart bot to apply changes." });
   } catch (err) {
     return res.status(500).send({ success: false, message: err.message });
   }

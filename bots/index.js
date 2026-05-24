@@ -172,6 +172,7 @@ export async function startBot(token) {
     token: botData.token,
     presence: botData.presence || "NXT BOT INDIA",
     presencePic: botData.presencePic || null,
+    prefix: botData.prefix || "*"
   });
 }
 

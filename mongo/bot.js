@@ -26,6 +26,10 @@ const botSchema = new mongoose.Schema({
   },
   presencePic: {
     type: String
+  },
+  prefix: {
+    type: String,
+    default: "*"
   }
 });
 
