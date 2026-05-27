@@ -17,8 +17,6 @@ jobs:
           username: ${{ secrets.SSH_USER }}
           key: ${{ secrets.SSH_PRIVATE_KEY }}
           script: |
-            ls
-            cd ~/nxtbot-back
             git pull origin main
             npm install --production
             pm2 restart nxtbot-back
