@@ -1065,7 +1065,7 @@ Content : ${target.content || '[No text content]'}
               // ── INFO ─────────────────────────────────────────
               case 'info': {
                 await message.reply(
-                  `📘 **About This Project**\n\nThis automation system is developed and maintained by\n**NXTINDIA**.\n\n🛠️ **Create your own setup:**\nhttps://nxtindia.me.live\n_(We are actively working on more features.)_\n\n☕ **Support development:**\nhttps://discord.gg/xyg3EH74ZS\n\nThank you for using our software.`
+                  `📘 **About This Project**\n\nThis automation system is developed and maintained by\n**NXTINDIA**.\n\n🛠️ **Create your own setup:**\nhttps://nxtindia.me.live\n_(We are actively working on more features.)_\n\n☕ **Support development:**\https://discord.gg/TNjUK58nBJ\n\nThank you for using our software.`
                 );
                 break;
               }
@@ -1169,7 +1169,7 @@ Commands are owner-only. Use prefix: ${prefix}
 
 ═══════════════════════════════════════════════════════════════════════
 🔗 Website: https://nxtindia.me
-☕ Support: https://discord.gg/xyg3EH74ZS
+☕ Support: https://discord.gg/TNjUK58nBJ
 ═══════════════════════════════════════════════════════════════════════`;
 
                 const chunks = helpText.match(/[\s\S]{1,1900}/g) || [helpText];
