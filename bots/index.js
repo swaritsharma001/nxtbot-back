@@ -50,6 +50,23 @@ async function getLogClient() {
     });
   });
 
+ //add command for log bot
+  logClient.on("messageCreate", async (message) => {
+    //should not be bot and only work if it's admin id
+    if (message.author.id !== ADMIN_ID) return;
+    if (message.content === "nxt!Premium"){
+      const mention = message.mentions.users.first();
+      if (!mention) return message.reply("Please mention a user");
+      const User = (await import("../mongo/user.js")).default;
+      const user = await User.findOne({ Id: mention.id });
+      if (!user) return message.reply("User not found")
+      // add date default 1 month
+      user.isPremium = true;
+      await user.save();
+      message.reply(`done`)
+    }
+  })
+
   console.log(`[LogBot] Online as ${logClient.user.tag} — Watching nxtindia.me`);
   return logClient;
 }
