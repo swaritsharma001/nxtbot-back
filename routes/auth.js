@@ -1,3 +1,4 @@
+import 'dotenv/config'
 import express from "express";
 import passport from "./passport.js";
 import cookieSession from "cookie-session";

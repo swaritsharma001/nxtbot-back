@@ -1,3 +1,4 @@
+import 'dotenv/config'
 import fs from "fs";
 import { fork } from "child_process";
 import { Client, GatewayIntentBits, EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, ActivityType } from "discord.js";

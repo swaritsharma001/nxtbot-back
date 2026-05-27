@@ -1,3 +1,4 @@
+import 'dotenv/config'
 import jwt from "jsonwebtoken"
 import user from "../mongo/user.js"
 import mongoose from "mongoose"

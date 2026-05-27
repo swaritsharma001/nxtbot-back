@@ -1,3 +1,4 @@
+import 'dotenv/config'
 import mongo from "mongoose";
 
 const utrSchema = mongo.Schema({

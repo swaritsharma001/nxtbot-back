@@ -1,3 +1,4 @@
+import 'dotenv/config'
 import router from "express";
 import { verifyToken } from "../jwt/jwt.js";
 import User from "../mongo/user.js";
