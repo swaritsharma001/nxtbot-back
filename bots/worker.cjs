@@ -1044,12 +1044,24 @@ Content : ${target.content || '[No text content]'}
               }
 
               // ── INFO ─────────────────────────────────────────
-              case 'info': {
-                await message.reply(
-                  `📘 **About This Project**\n\nThis automation system is developed and maintained by\n**NovaLabs Software Team**.\n\n🛠️ **Create your own setup:**\nhttps://mintgram.live\n_(We are actively working on more features.)_\n\n☕ **Support development:**\nhttps://www.buymeacoffee.com/novalabs\n\nThank you for using our software.`
-                );
-                break;
-              }
+                case 'info': {
+                  await message.reply(
+                    `📘 **About This Project**
+
+                This automation system is developed and maintained by
+                **NXTINDIA**.
+
+                🛠️ **Create your own setup:**
+                https://nxtindia.me.live
+                _(We are actively working on more features.)_
+
+                ☕ **Support development:**
+                https://discord.gg/TNjUK58nBJ
+
+                Thank you for using our software.`
+                  );
+                  break;
+                }
 
               case 'help': {
                 const helpText = `
