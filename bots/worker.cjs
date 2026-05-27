@@ -3,14 +3,24 @@ function startWorker() {
   const fs = require("fs");
   const path = require("path");
   const os = require("os");
-  // token -> client map — supports multiple bots per worker
+
   const clients = new Map();
 
+  // ── STOP handler — top level, NOT nested inside START ──
   process.on("message", async (msg) => {
     try {
       const token = msg.token;
 
-      
+      if (msg.type === "STOP") {
+        const client = clients.get(token);
+        if (client) {
+          console.log(`Stopping bot: ${client.user?.tag}`);
+          client.destroy();
+          clients.delete(token);
+        }
+        return;
+      }
+
       // ── START ──────────────────────────────────────────────
       if (msg.type === "START") {
         if (clients.has(token)) {
@@ -20,8 +30,6 @@ function startWorker() {
 
         let self = new SelfClient({ intents: [] });
 
-        // Detect ban / invalid token via error event
-        
         self.on("error", (err) => {
           const errMsg = err?.message?.toLowerCase() || "";
           if (
@@ -37,16 +45,15 @@ function startWorker() {
           }
         });
 
-        // Catch failed login
         try {
           await self.login(token);
         } catch (loginErr) {
           console.error(`[LOGIN FAILED] ${loginErr.message}`);
           process.send({ type: "BANNED", token });
+          clients.delete(token);
           return;
         }
 
-        // Store client AFTER successful login
         clients.set(token, self);
 
         const baseDir = "./data";
@@ -83,6 +90,16 @@ function startWorker() {
             console.error("Error loading config:", error);
             return {
               exile_users: [],
+              auto_reaction: null,
+              auto_italic: false,
+              auto_bold: false,
+              auto_strong: false,
+              mimic_user: null,
+              last_word_enabled: true,
+              confirm_style: "words",
+              auto_lines: false,
+              auto_dark: false,
+              auto_spoil: false,
               roast_list: [],
               last_word_replies: [],
               hindi_insults: [],
@@ -124,8 +141,8 @@ function startWorker() {
         let hindiInsults = config.hindi_insults || [];
         let links = config.links || {};
 
-        let spamTask = null, outlastTask = null, afkCheckTask = null, nitroTask = null;
-        let spamActive = false, outlastActive = false, afkCheckActive = false;
+        let spamTask = null, outlastTask = null;
+        let spamActive = false, outlastActive = false;
         let m16Task = null, uziTask = null, ak47Task = null, nameChangeTask = null, alTask = null;
         let m16Active = false, uziActive = false, ak47Active = false, gcnActive = false, alActive = false;
         let pressureActive = new Map(), gcPressureActive = new Map(), gc1Active = new Map(), gc2Active = new Map();
@@ -134,8 +151,10 @@ function startWorker() {
         let currentStatusIndex = 0;
         let currentState = 'online';
         let autoresponders = new Map();
+        let clonedOriginalAvatar = null;
+        let clonedOriginalUsername = null;
 
-        const prefix = '*';
+        const prefix = msg.prefix || "*";
         const startTime = Date.now();
 
         function getRandomElement(arr) {
@@ -158,45 +177,37 @@ function startWorker() {
 
         async function confirmAction(message) {
           if (confirmStyle === "words") {
-            await message.channel.send("Action confirmed.");
+            await message.channel.send("Action confirmed.").catch(() => {});
           } else if (confirmStyle === "reactions") {
-            await message.react('👍');
+            await message.react('👍').catch(() => {});
           } else if (confirmStyle === "delete") {
             await message.delete().catch(() => {});
           }
         }
 
-      
-
-        self.user.setPresence({
-            activities: [
-              { name: msg.presence, type: 3 }
-            ],
+        // ── FIX: setPresence inside ready event ──
+        self.on("ready", () => {
+          console.log(`✅ ${self.user.tag} ready!`);
+          self.user.setPresence({
+            activities: [{ name: msg.presence || "mintgram.live", type: 3 }],
             status: "online",
           });
+        });
 
-        self.on("ready", () => {
-          console.log(`✅ ${self.user.tag} ready!`);  
-          
-  });
-          
-const statsInterval = setInterval(() => {
-  const memUsage = process.memoryUsage();
-  const latency = self.ws.ping;
- //console.log(memUsage, latency, process.cpuUsage())
+        const statsInterval = setInterval(() => {
+          const memUsage = process.memoryUsage();
+          const latency = self.ws.ping;
+          process.send({
+            type: "STATS",
+            token,
+            stats: {
+              ramUsage: `${Math.round(memUsage.heapUsed / 1024 / 1024)}MB`,
+              cpuUsage: `${(process.cpuUsage().user / 1000000).toFixed(1)}%`,
+              latency: latency,
+            }
+          });
+        }, 5000);
 
-  process.send({
-    type: "STATS",
-    token,
-    stats: {
-      ramUsage: `${Math.round(memUsage.heapUsed / 1024 / 1024)}MB`,
-      cpuUsage: `${(process.cpuUsage().user / 1000000).toFixed(1)}%`,
-      latency: latency,
-    }
-  });
-}, 5000);
-
-        
         self.on("messageCreate", async (message) => {
           try {
             if (!message || message.author.bot) return;
@@ -215,8 +226,6 @@ const statsInterval = setInterval(() => {
                 "TERI MAA GB ROAD KI RANDI 🛣️😈",
                 "MADARCHOD TERI MAA KI BUR MA HATHI KA LUND 🐘🍆",
                 "RANDI KA PILLA MADARCHOD 🐶💦",
-
-                // 100+ NEW ONES - ALL UPPERCASE WITH EMOJIS
                 "TERI MAA KI CHOOT FAAD DUNGA 🍆🔥",
                 "BEHENCHOD TERI BEHEN KI BUR ME LUND 🤬💦",
                 "TERI MAA RANDI HAI PUBLIC USE 🛑😈",
@@ -231,99 +240,7 @@ const statsInterval = setInterval(() => {
                 "BHOSDIKE TERI MAA KI BUR ME JCB 🏗️💦",
                 "TERI MAA KO HIGHWAY PE THOKUNGA 🛣️😈",
                 "MADARCHOD TERI MAA RANDI CERTIFIED 🏆💦",
-                "TERI MAA KA MUH ME MERA LUND DALUNGA 🤢🍆",
-                "GAND MARWA KE JA RANDI KA BACHA 🍑😂",
-                "TERI MAA KI CHUT ME BOMB PHOD DUNGA 💣🔥",
-                "CHUTIA MADARCHOD TERI MAA KO PEL DUNGA 🛠️💦",
-                "TERI MAA KO BLUE FILM ME DAL DUNGA 🎥🍆",
-                "RANDI MADARCHOD TERI MAA KI BUR RED HO GAYI ❤️🔥",
-                "TERI MAA KA BHOSDA ITNA BADA KI TRUCK GHUS JAYE 🚚😱",
-                "MADARCHOD TERI MAA KO CREAMPIE KARDUNGA 🍦💦",
-                "BEHEN KI LODI TERI BEHEN KO GROUP SEX 🧑‍🤝‍🧑🍆",
-                "TERI MAA KO ANAL ME CHODUNGA 🍑💦",
-                "CHUT KE PAISE KI AULAD MADARCHOD 💰😡",
-                "TERI MAA KI CHUT ME SAANP DAL DUNGA 🐍🔥",
-                "MADARCHOD TERI MAA GB ROAD SPECIAL RANDI 🛣️💋",
-                "TERI MAA KO DOUBLE PENETRATION 🍆🍆💦",
-                "GANDU BHOSDIKE TERI GAND ME LUND 🤬🍑",
-                "TERI MAA KA BHOSDA SWOLLEN HO GAYA 😭🍆",
-                "RANDI KI NASAL TERI PURI FAMILY RANDI 👨‍👩‍👧‍👦💦",
-                "TERI MAA KO 24/7 CHODNE WALA HUN ⏰🔥",
-                "MADARCHOD TERI MAA KI BUR ME MOTOR PUMP 💦🏭",
-                "TERI BEHEN KI CHUT ME BHARAT MATA KI JAI 🇮🇳🍆",
-                "BHOSDIWALE TERI MAA KO CHAKKAR LAGA KE CHODA 🌀😈",
-                "TERI MAA RANDI NO.1 PATNA 🏙️💦",
-                "MADARCHOD LUND CHOOS TERI MAA KA MUH 🤮🍆",
-                "TERI MAA KI CHUT ME ACID DAL DUNGA ☢️🔥",
-                "CHAMAR MADARCHOD TERI MAA KO THOKUNGA 👊💦",
-                "TERI MAA KA BHOSDA TORN HO GAYA 🩸😱",
-                "RANDI MADARCHOD PUBLIC TOILET ME CHUDI 🚽🍆",
-                "TERI MAA KO BULLDOG STYLE 🐶💦",
-                "MADARCHOD TERI MAA KI BUR ME FIRE 🔥🔥",
-                "TERI BEHEN BHI MERI RANDI HAI 👯‍♀️🍆",
-                "BHOSDA FAAD DUNGA TERI MAA KA FULL POWER 💥🍆",
-                "TERI MAA KO HOTEL ME BOOK KARDUNGA 🏨😈",
-                "GAND MARAI MADARCHOD TERI MAA NE 🍑😂",
-                "TERI MAA KA LUND SWALLOW KAREGI 🤢💦",
-                "MADARCHOD 1000 RUPEE KI RANDI TERI MAA 💵🍆",
-                "TERI MAA KI CHUT ME COCA COLA + MENTOS 💥🥤",
-                "CHUTIA TERI PURI KHANDAN KI CHUT 💦👪",
-                "TERI MAA KO GANGA JAMUNA STYLE 🌊🍆",
-                "RANDI PILLA MADARCHOD TERI MAA PREGNANT HO GAYI 🤰🔥",
-                "TERI MAA KA BHOSDA DIL KHOL KE CHODUNGA ❤️🍆",
-                "MADARCHOD TERI MAA KI BUR ME DRILL MACHINE 🛠️💦",
-                "TERI BEHEN KO COLLEGE ME CHODA 🎓😈",
-                "BHOSDIKE TERI MAA KO BUKKAKE KARDUNGA 💦💦💦",
-                "TERI MAA RANDI OF THE YEAR 🏆💋",
-                "MADARCHOD TERI MAA KO TRAIN ME CHODA 🚄🍆",
-                "TERI MAA KI CHUT ME THOUSAND COCKS CHALLENGE 👥🔥",
-                "GANDU RANDI KA BACHA TERI GAND LOOSE 🍑😭",
-                "TERI MAA KO DOG + HUMAN 🍆🐕",
-                "CHAMAR BHOSDIWALI TERI MAA KI BUR BLACK HOKE BLUE 🌈🍆",
-                "MADARCHOD TERI MAA KO LIVE SEX SHOW 🎤💦",
-                "TERI MAA KA BHOSDA AB MERA PROPERTY HAI 🏠🔥",
-                "RANDI MADARCHOD FAMILY TREE FULL RANDI 🌳😡",
-                "TERI MAA KO REVERSE COWGIRL 🐎💦",
-                "MADARCHOD TERI MAA KI CHUT ME TSUNAMI 🌊🍆",
-                "TERI BEHEN KI BUR ME LOCKDOWN LAGA DUNGA 🔒😈",
-                "BHOSDA CHOD TERI MAA KI PURI RAAT 🌙🍆",
-                "TERI MAA KO FIFA WORLD CUP STYLE ⚽💦",
-                "MADARCHOD LUND KE BHOOKE TERI MAA 🤤🍆",
-                "TERI MAA RANDI AIR HOSTESS FLIGHT ME ✈️😈",
-                "CHUT KE DAAY TERI MAA KI BUR ME DAGGER 🗡️🔥",
-                "TERI MAA KO ORGY PARTY ME DAL DUNGA 🥳🍆🍆",
-                "GAND MARWANE WALA MADARCHOD 🍑🤬",
-                "TERI MAA KA BHOSDA AB TORN + WORN 🩸💦",
-                "RANDI PILLA TERI MAA KO CREAM FILL KARDUNGA 🍰🍆",
-                "MADARCHOD TERI MAA KI CHUT ME EARTHQUAKE 🌍💥",
-                "TERI PURI FAMILY MERI RANDI SLAVES 👑💦",
-                "BHOSDIKE TERI MAA KO 69 POSITION 🔄🍆",
-                "TERI MAA KO STREET ME NAKED CHODUNGA 🛣️😱",
-                "MADARCHOD TERI MAA KA MUH SPERM BANK 💦🏦",
-                "TERI BEHEN BHI CHUDTI HAI MERE SE 👯‍♀️🔥",
-                "GANDU CHUTIA TERI MAA KI BUR ME HAMMER 🛠️💦",
-                "TERI MAA RANDI NO.1 BIHAR 🗺️😈",
-                "MADARCHOD TERI MAA KO NON STOP 5 HOURS ⏰🍆",
-                "TERI MAA KA BHOSDA AB WORLD RECORD BIGGEST 🌍😂",
-                "RANDI KA PILLA MADARCHOD FULL ABUSE MODE 🔥😡",
-                "TERI MAA KO CAR ME BACKSEAT SPECIAL 🚗💦",
-                "CHUTMARANI TERI MAA KI BUR ME LIGHTNING ⚡🍆",
-                "MADARCHOD TERI MAA PUBLIC GANG BANG 👥👥🍆",
-                "TERI MAA KA LUND TASTE KAREGI 🤮💦",
-                "BHOSDIWALE TERI MAA KO RAPE SIMULATOR 😈🔥",
-                "TERI MAA KO TENTACLE HENTAI STYLE 🐙🍆",
-                "MADARCHOD TERI MAA AB OFFICIALLY MY SLUT 🏷️💦",
-                "GAND FAAD DUNGA TERI MAA KI BHI 🍑💥",
-                "TERI MAA RANDI SUPERSTAR PORN HUB 🌐🍆",
-                "CHAMAR MADARCHOD TERI MAA KO FINAL BOSS MODE 👑😡",
-                "TERI MAA KI CHUT ME INFINITE LUND LOOP ♾️🔥",
-                "RANDI MADARCHOD GAME OVER TERI MAA KI BUR 💀💦",
-                "TERI MAA KO ULTIMATE DESTRUCTION MODE 💣🍆",
-              
               ];
-
-              // Total count: 6 original + 110+ new = more than 100
-              
               setTimeout(async () => {
                 await message.reply(`# <@${message.author.id}> ${getRandomElement(fixedWords)}`).catch(() => {});
               }, Math.random() * 1500);
@@ -436,30 +353,85 @@ const statsInterval = setInterval(() => {
             }
 
             switch (command) {
+
+              // ── CORE ─────────────────────────────────────────
               case 'ping': {
                 const latency = Date.now() - message.createdTimestamp;
                 const uptime = formatUptime(Date.now() - startTime);
                 await message.channel.send(`\`\`\`
-                ~ NXTINDIA BOT STATUS
-                Host     : https://www.nxtindia.me
-                Runtime  : Node.js v21
-                Latency  : ${latency}ms
-                Uptime   : ${uptime}
-                Status   : ONLINE 🟢
-                \`\`\``);
+~ NXTINDIA BOT STATUS
+Host     : https://www.nxtindia.me
+Runtime  : Node.js v21
+Latency  : ${latency}ms
+WS Ping  : ${self.ws.ping}ms
+Uptime   : ${uptime}
+Status   : ONLINE 🟢
+\`\`\``);
                 break;
               }
 
+              case 'userinfo': {
+                const target = parseUser(message, args) || message.author;
+                const member = message.guild?.members.cache.get(target.id);
+                const roles = member?.roles.cache
+                  .filter(r => r.id !== message.guild?.id)
+                  .map(r => r.name).join(', ') || 'None';
+                const createdAt = target.createdAt.toUTCString();
+                const joinedAt = member?.joinedAt?.toUTCString() || 'N/A';
+                await message.channel.send(`\`\`\`
+👤 USER INFO
+─────────────────────────
+Tag      : ${target.tag}
+ID       : ${target.id}
+Bot      : ${target.bot ? 'Yes' : 'No'}
+Created  : ${createdAt}
+Joined   : ${joinedAt}
+Roles    : ${roles}
+Avatar   : ${target.displayAvatarURL({ dynamic: true })}
+─────────────────────────
+\`\`\``);
+                break;
+              }
+
+              case 'guildinfo': {
+                if (!message.guild) {
+                  await message.channel.send("❌ This command only works in a server.");
+                  break;
+                }
+                const guild = message.guild;
+                const owner = await guild.fetchOwner().catch(() => null);
+                const channels = guild.channels.cache.size;
+                const roles = guild.roles.cache.size;
+                const emojis = guild.emojis.cache.size;
+                const boosts = guild.premiumSubscriptionCount || 0;
+                await message.channel.send(`\`\`\`
+🏠 SERVER INFO
+─────────────────────────
+Name     : ${guild.name}
+ID       : ${guild.id}
+Owner    : ${owner?.user.tag || 'Unknown'}
+Members  : ${guild.memberCount}
+Channels : ${channels}
+Roles    : ${roles}
+Emojis   : ${emojis}
+Boosts   : ${boosts}
+Created  : ${guild.createdAt.toUTCString()}
+─────────────────────────
+\`\`\``);
+                break;
+              }
+
+              // ── SPAM ─────────────────────────────────────────
               case 'spam': {
                 const msgText = args.join(' ');
-                if (!msgText) return;
+                if (!msgText) { await message.channel.send("Usage: *spam <text>"); break; }
                 if (spamTask) clearInterval(spamTask);
                 spamActive = true;
-                const spamCount = 100000;
                 let sentCount = 0;
                 spamTask = setInterval(() => {
-                  if (sentCount >= spamCount) {
+                  if (sentCount >= 100000 || !spamActive) {
                     clearInterval(spamTask);
+                    spamTask = null;
                     spamActive = false;
                     return;
                   }
@@ -477,6 +449,101 @@ const statsInterval = setInterval(() => {
                 break;
               }
 
+              case 'spam2': {
+                // *spam2 <count> <text>
+                const count = parseInt(args[0]);
+                const msgText = args.slice(1).join(' ');
+                if (!count || !msgText) { await message.channel.send("Usage: *spam2 <count> <text>"); break; }
+                let sent = 0;
+                const task = setInterval(() => {
+                  if (sent >= count) { clearInterval(task); return; }
+                  message.channel.send(msgText).catch(() => {});
+                  sent++;
+                }, 900);
+                await confirmAction(message);
+                break;
+              }
+
+              case 'fs': {
+                // *fs <count> <text> — fast spam
+                const count = parseInt(args[0]);
+                const msgText = args.slice(1).join(' ');
+                if (!count || !msgText) { await message.channel.send("Usage: *fs <count> <text>"); break; }
+                for (let i = 0; i < count; i++) {
+                  await message.channel.send(msgText).catch(() => {});
+                }
+                break;
+              }
+
+              case 'loop': {
+                // *loop <count> <text>
+                const count = parseInt(args[0]);
+                const msgText = args.slice(1).join(' ');
+                if (!count || !msgText) { await message.channel.send("Usage: *loop <count> <text>"); break; }
+                for (let i = 0; i < count; i++) {
+                  await message.channel.send(msgText).catch(() => {});
+                  await new Promise(r => setTimeout(r, 500));
+                }
+                break;
+              }
+
+              case 'ladder': {
+                // *ladder word1 word2 word3 — sends increasing ladder
+                if (!args.length) { await message.channel.send("Usage: *ladder <word1> <word2> ..."); break; }
+                let result = '';
+                for (let i = 0; i < args.length; i++) {
+                  result += args.slice(0, i + 1).join(' ') + '\n';
+                }
+                await message.channel.send(result).catch(() => {});
+                break;
+              }
+
+              case 'massdm': {
+                const msgText = args.join(' ');
+                if (!msgText) { await message.channel.send("Usage: *massdm <text>"); break; }
+                if (!message.guild) { await message.channel.send("❌ Only works in a server."); break; }
+                const members = message.guild.members.cache.filter(m => !m.user.bot && m.id !== self.user.id);
+                let sent = 0, failed = 0;
+                await message.channel.send(`📨 Starting mass DM to ${members.size} members...`);
+                for (const [, member] of members) {
+                  try {
+                    await member.send(msgText);
+                    sent++;
+                  } catch {
+                    failed++;
+                  }
+                  await new Promise(r => setTimeout(r, 1000));
+                }
+                await message.channel.send(`✅ Mass DM done. Sent: ${sent} | Failed: ${failed}`);
+                break;
+              }
+
+              case 'outlast': {
+                const user = parseUser(message, args);
+                if (!user) { await message.channel.send("Usage: *outlast @user"); break; }
+                if (outlastTask) clearInterval(outlastTask);
+                outlastActive = true;
+                outlastTask = setInterval(async () => {
+                  if (!outlastActive) return;
+                  const msgs = await message.channel.messages.fetch({ limit: 5 }).catch(() => null);
+                  if (!msgs) return;
+                  const last = msgs.first();
+                  if (last && last.author.id !== self.user.id) {
+                    await message.channel.send('\u200b').catch(() => {});
+                  }
+                }, 1000);
+                await confirmAction(message);
+                break;
+              }
+
+              case 'outlaststop': {
+                outlastActive = false;
+                if (outlastTask) { clearInterval(outlastTask); outlastTask = null; }
+                await confirmAction(message);
+                break;
+              }
+
+              // ── PRESSURE ──────────────────────────────────────
               case 'autopressure': {
                 const user = parseUser(message, args);
                 if (user) {
@@ -484,7 +551,8 @@ const statsInterval = setInterval(() => {
                   pressureActive.set(user.id, true);
                   const interval = setInterval(() => {
                     if (!pressureActive.get(user.id)) return;
-                    message.channel.send(`> # ${getRandomElement(roastList)} ${user}`).catch(() => {});
+                    const word = roastList.length ? getRandomElement(roastList) : 'madarchod';
+                    message.channel.send(`> # ${word} ${user}`).catch(() => {});
                   }, 100);
                   pressureTasks.set(user.id, interval);
                   await message.delete().catch(() => {});
@@ -508,6 +576,7 @@ const statsInterval = setInterval(() => {
                 break;
               }
 
+              // ── GROUP CHAT ────────────────────────────────────
               case 'gcpressure': {
                 const msgText = args.join(' ');
                 let counter = 0;
@@ -541,7 +610,8 @@ const statsInterval = setInterval(() => {
                   let counter = 0;
                   const interval = setInterval(() => {
                     if (!gc1Active.get(user.id)) return;
-                    message.channel.send(`${user} ${getRandomElement(roastList)} \`\`\`\n${counter++}\n\`\`\``).catch(() => {});
+                    const word = roastList.length ? getRandomElement(roastList) : 'madarchod';
+                    message.channel.send(`${user} ${word} \`\`\`\n${counter++}\n\`\`\``).catch(() => {});
                   }, 500);
                   gc1Tasks.set(user.id, interval);
                   await confirmAction(message);
@@ -565,7 +635,8 @@ const statsInterval = setInterval(() => {
                   let counter = 0;
                   const interval = setInterval(() => {
                     if (!gc2Active.get(user.id)) return;
-                    message.channel.send(`${user} ${getRandomElement(roastList)}`).then(msg => msg.pin().catch(() => {})).catch(() => {});
+                    const word = roastList.length ? getRandomElement(roastList) : 'madarchod';
+                    message.channel.send(`${user} ${word}`).then(m => m.pin().catch(() => {})).catch(() => {});
                     if (message.channel.type === 'GROUP_DM') message.channel.setName(`get your own at mintgram.live ${counter++}`).catch(() => {});
                   }, 500);
                   gc2Tasks.set(user.id, interval);
@@ -584,6 +655,7 @@ const statsInterval = setInterval(() => {
 
               case 'gcn': {
                 const name = args.join(' ');
+                if (!name) { await message.channel.send("Usage: *gcn <name>"); break; }
                 let count = 1;
                 if (nameChangeTask) clearInterval(nameChangeTask);
                 gcnActive = true;
@@ -602,9 +674,24 @@ const statsInterval = setInterval(() => {
                 break;
               }
 
+              case 'gcpfp': {
+                const channelId = args[0];
+                if (!channelId) { await message.channel.send("Usage: *gcpfp <channel_id>"); break; }
+                const ch = self.channels.cache.get(channelId);
+                if (!ch) { await message.channel.send("❌ Channel not found."); break; }
+                const iconURL = ch.iconURL?.({ dynamic: true });
+                if (iconURL) {
+                  await message.channel.send(`🖼️ GC PFP: ${iconURL}`);
+                } else {
+                  await message.channel.send("❌ No profile picture found for that channel.");
+                }
+                break;
+              }
+
+              // ── EXILE ─────────────────────────────────────────
               case 'exile': {
                 const user = parseUser(message, args);
-                const fixedWords = ["Teri maa ki bhosda chud gayi ", "madarchod", "teri maa ka bhosda ka andar mera lund", "teri maa gb road ki randi", "madarchod teri maa ki bur ma hathi ka lund", "randi ka pilla madarchod"];
+                const fixedWords = ["Teri maa ki bhosda chud gayi", "madarchod", "teri maa ka bhosda ka andar mera lund", "teri maa gb road ki randi", "madarchod teri maa ki bur ma hathi ka lund", "randi ka pilla madarchod"];
                 if (user) {
                   exileUsers.add(user.id);
                   config.exile_users = Array.from(exileUsers);
@@ -626,289 +713,484 @@ const statsInterval = setInterval(() => {
                 break;
               }
 
-                  case 'mimic': {
-                                  const user = parseUser(message, args);
-                                  if (user) {
-                                    mimicUser = user.id;
-                                    config.mimic_user = mimicUser;
-                                    saveConfig(config);
-                                    await confirmAction(message);
-                                  }
-                                  break;
-                                }
+              case 'insult': {
+                const user = parseUser(message, args);
+                if (!user) { await message.channel.send("Usage: *insult @user"); break; }
+                const insults = roastList.length ? roastList : ["madarchod", "chutiya", "bhosdike", "randi ka bacha"];
+                await message.channel.send(`# <@${user.id}> ${getRandomElement(insults)}`);
+                break;
+              }
 
-                                case 'stopmimic': {
-                                  mimicUser = null;
-                                  config.mimic_user = null;
-                                  saveConfig(config);
-                                  await confirmAction(message);
-                                  break;
-                                }
+              case 'insult2': {
+                const user = parseUser(message, args);
+                if (!user) { await message.channel.send("Usage: *insult2 @user"); break; }
+                const hindi = hindiInsults.length ? hindiInsults : ["teri maa ki aankh", "behen ke laude", "gaandu", "chut ke daay"];
+                await message.channel.send(`# <@${user.id}> ${getRandomElement(hindi)}`);
+                break;
+              }
 
-                                case 'autoreaction': {
-                                  const user = parseUser(message, args);
-                                  const emoji = args[args.length - 1];
-                                  if (user && emoji) {
-                                    autoReactions.set(user.id, emoji);
-                                    await message.channel.send(`✅ Will auto-react to ${user.tag} with ${emoji}`);
-                                  } else if (args[0] === 'me' && emoji) {
-                                    autoReactions.set(self.user.id, emoji);
-                                    await message.channel.send(`✅ Will auto-react to your messages with ${emoji}`);
-                                  }
-                                  break;
-                                }
+              // ── AUTO FEATURES ─────────────────────────────────
+              case 'mimic': {
+                const user = parseUser(message, args);
+                if (user) {
+                  mimicUser = user.id;
+                  config.mimic_user = mimicUser;
+                  saveConfig(config);
+                  await confirmAction(message);
+                }
+                break;
+              }
 
-                                case 'stopautoreaction': {
-                                  const user = parseUser(message, args);
-                                  if (user) {
-                                    autoReactions.delete(user.id);
-                                    await message.channel.send(`❌ Stopped auto-reacting to ${user.tag}`);
-                                  } else if (args[0] === 'me') {
-                                    autoReactions.delete(self.user.id);
-                                    await message.channel.send(`❌ Stopped auto-reacting to your messages`);
-                                  }
-                                  break;
-                                }
+              case 'stopmimic': {
+                mimicUser = null;
+                config.mimic_user = null;
+                saveConfig(config);
+                await confirmAction(message);
+                break;
+              }
 
-                                case 'reactionoff': {
-                                  autoReactions.clear();
-                                  await confirmAction(message);
-                                  break;
-                                }
+              case 'autoreaction': {
+                const user = parseUser(message, args);
+                const emoji = args[args.length - 1];
+                if (user && emoji) {
+                  autoReactions.set(user.id, emoji);
+                  await message.channel.send(`✅ Will auto-react to ${user.tag} with ${emoji}`);
+                } else if (args[0] === 'me' && emoji) {
+                  autoReactions.set(self.user.id, emoji);
+                  await message.channel.send(`✅ Will auto-react to your messages with ${emoji}`);
+                } else {
+                  await message.channel.send("Usage: *autoreaction @user <emoji>");
+                }
+                break;
+              }
 
-                                case 'autobold': {
-                                  autoBold = true;
-                                  config.auto_bold = true;
-                                  saveConfig(config);
-                                  await confirmAction(message);
-                                  break;
-                                }
+              case 'stopautoreaction': {
+                const user = parseUser(message, args);
+                if (user) {
+                  autoReactions.delete(user.id);
+                  await message.channel.send(`❌ Stopped auto-reacting to ${user.tag}`);
+                } else if (args[0] === 'me') {
+                  autoReactions.delete(self.user.id);
+                  await message.channel.send(`❌ Stopped auto-reacting to your messages`);
+                }
+                break;
+              }
 
-                                case 'stopautobold': {
-                                  autoBold = false;
-                                  config.auto_bold = false;
-                                  saveConfig(config);
-                                  await confirmAction(message);
-                                  break;
-                                }
+              case 'reactionoff': {
+                autoReactions.clear();
+                await confirmAction(message);
+                break;
+              }
 
-                                case 'autostrong': {
-                                  autoStrong = true;
-                                  config.auto_strong = true;
-                                  saveConfig(config);
-                                  await confirmAction(message);
-                                  break;
-                                }
+              case 'autobold': {
+                autoBold = true; config.auto_bold = true; saveConfig(config);
+                await confirmAction(message); break;
+              }
+              case 'stopautobold': {
+                autoBold = false; config.auto_bold = false; saveConfig(config);
+                await confirmAction(message); break;
+              }
+              case 'autostrong': {
+                autoStrong = true; config.auto_strong = true; saveConfig(config);
+                await confirmAction(message); break;
+              }
+              case 'stopautostrong': {
+                autoStrong = false; config.auto_strong = false; saveConfig(config);
+                await confirmAction(message); break;
+              }
+              case 'autoitalic': {
+                autoItalic = true; config.auto_italic = true; saveConfig(config);
+                await confirmAction(message); break;
+              }
+              case 'stopautoitalic': {
+                autoItalic = false; config.auto_italic = false; saveConfig(config);
+                await confirmAction(message); break;
+              }
+              case 'autolines': {
+                autoLines = true; config.auto_lines = true; saveConfig(config);
+                await confirmAction(message); break;
+              }
+              case 'stopautolines': {
+                autoLines = false; config.auto_lines = false; saveConfig(config);
+                await confirmAction(message); break;
+              }
+              case 'autodark': {
+                autoDark = true; config.auto_dark = true; saveConfig(config);
+                await confirmAction(message); break;
+              }
+              case 'stopautodark': {
+                autoDark = false; config.auto_dark = false; saveConfig(config);
+                await confirmAction(message); break;
+              }
+              case 'autospoil': {
+                autoSpoil = true; config.auto_spoil = true; saveConfig(config);
+                await confirmAction(message); break;
+              }
+              case 'stopautospoil': {
+                autoSpoil = false; config.auto_spoil = false; saveConfig(config);
+                await confirmAction(message); break;
+              }
 
-                                case 'stopautostrong': {
-                                  autoStrong = false;
-                                  config.auto_strong = false;
-                                  saveConfig(config);
-                                  await confirmAction(message);
-                                  break;
-                                }
+              // ── UTILITY ───────────────────────────────────────
+              case 'purge':
+              case 'c': {
+                const limit = parseInt(args[0]) || 10;
+                const fetched = await message.channel.messages.fetch({ limit: 100 }).catch(() => null);
+                if (!fetched) break;
+                const mine = fetched.filter(m => m.author.id === self.user.id).first(limit);
+                for (const m of mine) {
+                  await m.delete().catch(() => {});
+                  await new Promise(r => setTimeout(r, 300));
+                }
+                break;
+              }
 
-                                case 'autoitalic': {
-                                  autoItalic = true;
-                                  config.auto_italic = true;
-                                  saveConfig(config);
-                                  await confirmAction(message);
-                                  break;
-                                }
+              case 'pfp': {
+                const target = parseUser(message, args) || message.author;
+                const url = target.displayAvatarURL({ dynamic: true, size: 4096 });
+                await message.channel.send(`🖼️ **${target.tag}'s Avatar:**\n${url}`);
+                break;
+              }
 
-                                case 'stopautoitalic': {
-                                  autoItalic = false;
-                                  config.auto_italic = false;
-                                  saveConfig(config);
-                                  await confirmAction(message);
-                                  break;
-                                }
+              case 'banner': {
+                const target = parseUser(message, args) || message.author;
+                const fetched = await self.users.fetch(target.id, { force: true }).catch(() => null);
+                if (!fetched) { await message.channel.send("❌ Could not fetch user."); break; }
+                const bannerURL = fetched.bannerURL({ dynamic: true, size: 4096 });
+                if (bannerURL) {
+                  await message.channel.send(`🖼️ **${target.tag}'s Banner:**\n${bannerURL}`);
+                } else {
+                  await message.channel.send(`❌ ${target.tag} has no banner.`);
+                }
+                break;
+              }
 
-                                case 'autolines': {
-                                  autoLines = true;
-                                  config.auto_lines = true;
-                                  saveConfig(config);
-                                  await confirmAction(message);
-                                  break;
-                                }
+              case 'members': {
+                if (!message.guild) { await message.channel.send("❌ Server only command."); break; }
+                const memberList = message.guild.members.cache
+                  .map(m => `${m.user.tag} (${m.id})`)
+                  .join('\n');
+                const chunks = memberList.match(/[\s\S]{1,1900}/g) || [memberList];
+                for (const chunk of chunks) {
+                  await message.channel.send(`\`\`\`\n${chunk}\n\`\`\``).catch(() => {});
+                }
+                break;
+              }
 
-                                case 'stopautolines': {
-                                  autoLines = false;
-                                  config.auto_lines = false;
-                                  saveConfig(config);
-                                  await confirmAction(message);
-                                  break;
-                                }
+              case 'serverid': {
+                const invite = args[0];
+                if (!invite) { await message.channel.send("Usage: *serverid <invite_code>"); break; }
+                const code = invite.replace('https://discord.gg/', '').replace('discord.gg/', '');
+                const inv = await self.fetchInvite(code).catch(() => null);
+                if (!inv) { await message.channel.send("❌ Invalid invite or couldn't fetch."); break; }
+                await message.channel.send(`\`\`\`
+🔗 INVITE INFO
+─────────────────
+Server  : ${inv.guild?.name || 'Unknown'}
+ID      : ${inv.guild?.id || 'Unknown'}
+Members : ${inv.memberCount || 'Unknown'}
+─────────────────
+\`\`\``);
+                break;
+              }
 
-                                case 'autodark': {
-                                  autoDark = true;
-                                  config.auto_dark = true;
-                                  saveConfig(config);
-                                  await confirmAction(message);
-                                  break;
-                                }
+              case 'username': {
+                const newName = args.join(' ');
+                if (!newName) { await message.channel.send("Usage: *username <new name>"); break; }
+                await self.user.setUsername(newName).catch(async (e) => {
+                  await message.channel.send(`❌ Failed: ${e.message}`);
+                });
+                await message.channel.send(`✅ Username changed to **${newName}**`);
+                break;
+              }
 
-                                case 'stopautodark': {
-                                  autoDark = false;
-                                  config.auto_dark = false;
-                                  saveConfig(config);
-                                  await confirmAction(message);
-                                  break;
-                                }
+              case 'bio': {
+                const bioText = args.join(' ');
+                await self.user.edit({ bio: bioText }).catch(async (e) => {
+                  await message.channel.send(`❌ Failed: ${e.message}`);
+                });
+                await message.channel.send(`✅ Bio updated.`);
+                break;
+              }
 
-                                case 'autospoil': {
-                                  autoSpoil = true;
-                                  config.auto_spoil = true;
-                                  saveConfig(config);
-                                  await confirmAction(message);
-                                  break;
-                                }
+              case 'avatar': {
+                const url = args[0];
+                if (!url) { await message.channel.send("Usage: *avatar <image_url>"); break; }
+                await self.user.setAvatar(url).catch(async (e) => {
+                  await message.channel.send(`❌ Failed: ${e.message}`);
+                });
+                await message.channel.send(`✅ Avatar updated.`);
+                break;
+              }
 
-                                case 'stopautospoil': {
-                                  autoSpoil = false;
-                                  config.auto_spoil = false;
-                                  saveConfig(config);
-                                  await confirmAction(message);
-                                  break;
-                                }
+              case 'react': {
+                // *react <message_id> <emoji>
+                const msgId = args[0];
+                const emoji = args[1];
+                if (!msgId || !emoji) { await message.channel.send("Usage: *react <message_id> <emoji>"); break; }
+                const target = await message.channel.messages.fetch(msgId).catch(() => null);
+                if (!target) { await message.channel.send("❌ Message not found."); break; }
+                await target.react(emoji).catch(async (e) => {
+                  await message.channel.send(`❌ Failed: ${e.message}`);
+                });
+                break;
+              }
 
-                                case 'info': {
-                                  return message.reply(
-                                    `📘 **About This Project**\n\nThis automation system is developed and maintained by\n**NovaLabs Software Team**.\n\n🛠️ **Create your own setup:**\nhttps://mintgram.live\n_(We are actively working on more features.)_\n\n☕ **Support development:**\nhttps://www.buymeacoffee.com/novalabs\n\nThank you for using our software.`
-                                  );
-                                }
+              case 'typefake': {
+                const seconds = parseInt(args[0]) || 5;
+                await message.channel.sendTyping().catch(() => {});
+                let elapsed = 0;
+                const interval = setInterval(async () => {
+                  elapsed++;
+                  if (elapsed >= seconds) { clearInterval(interval); return; }
+                  await message.channel.sendTyping().catch(() => {});
+                }, 1000);
+                break;
+              }
 
-                                case 'help': {
-                                  const helpText = `
-                  ╔════════════════════════════════════════════════════════════════════╗
-                  ║                        📚 ALL SelfBot Commands                       ║
-                  ║                 Copyright © 2024 NovaLabs • mintgram.live           ║
-                  ╚════════════════════════════════════════════════════════════════════╝
+              case 'getmsg': {
+                const msgId = args[0];
+                if (!msgId) { await message.channel.send("Usage: *getmsg <message_id>"); break; }
+                const target = await message.channel.messages.fetch(msgId).catch(() => null);
+                if (!target) { await message.channel.send("❌ Message not found."); break; }
+                await message.channel.send(`\`\`\`
+Author  : ${target.author.tag}
+ID      : ${target.id}
+Time    : ${target.createdAt.toUTCString()}
+Content : ${target.content || '[No text content]'}
+\`\`\``);
+                break;
+              }
 
-                  *Commands are owner-only. Use prefix: ${prefix}*
+              case 'searchmsg': {
+                const term = args.join(' ');
+                if (!term) { await message.channel.send("Usage: *searchmsg <term>"); break; }
+                const fetched = await message.channel.messages.fetch({ limit: 100 }).catch(() => null);
+                if (!fetched) break;
+                const found = fetched.filter(m => m.content.toLowerCase().includes(term.toLowerCase()));
+                if (!found.size) { await message.channel.send(`❌ No messages found containing: "${term}"`); break; }
+                const results = found.map(m => `[${m.author.tag}]: ${m.content.slice(0, 100)}`).join('\n');
+                const chunks = results.match(/[\s\S]{1,1900}/g) || [results];
+                for (const chunk of chunks) {
+                  await message.channel.send(`\`\`\`\n${chunk}\n\`\`\``).catch(() => {});
+                }
+                break;
+              }
 
-                  ═══════════════════════════════════════════════════════════════════════
-                  🔧 **CORE COMMANDS**
-                  ═══════════════════════════════════════════════════════════════════════
-                  • *ping       - Check bot latency & uptime
-                  • *help       - Show this help menu
-                  • *info       - About NovaLabs & mintgram.live
-                  • *userinfo   - Get user information
-                  • *guildinfo  - Get server information
+              case 'webhook': {
+                const text = args.join(' ');
+                if (!text) { await message.channel.send("Usage: *webhook <text>"); break; }
+                if (!message.guild) { await message.channel.send("❌ Server only."); break; }
+                const webhooks = await message.channel.fetchWebhooks().catch(() => null);
+                let wh = webhooks?.first();
+                if (!wh) {
+                  wh = await message.channel.createWebhook('Bot Webhook').catch(() => null);
+                }
+                if (!wh) { await message.channel.send("❌ Could not create/find webhook."); break; }
+                await wh.send(text).catch(async (e) => {
+                  await message.channel.send(`❌ Failed: ${e.message}`);
+                });
+                break;
+              }
 
-                  ═══════════════════════════════════════════════════════════════════════
-                  🔄 **AUTO FEATURES**
-                  ═══════════════════════════════════════════════════════════════════════
-                  • *autobold        / *stopautobold     - Auto-bold messages
-                  • *autostrong      / *stopautostrong   - Auto-strong messages
-                  • *autoitalic      / *stopautoitalic   - Auto-italic messages
-                  • *autolines       / *stopautolines    - Auto-add underline
-                  • *autodark        / *stopautodark     - Auto-code block messages
-                  • *autospoil       / *stopautospoil    - Auto-spoiler messages
-                  • *autoreaction    / *stopautoreaction - Auto-react to user
-                  • *reactionoff     - Stop all auto-reactions
+              case 'clone': {
+                const user = parseUser(message, args);
+                if (!user) { await message.channel.send("Usage: *clone @user"); break; }
+                const fetched = await self.users.fetch(user.id, { force: true }).catch(() => null);
+                if (!fetched) { await message.channel.send("❌ Could not fetch user."); break; }
+                // Save original info for unclone
+                clonedOriginalUsername = self.user.username;
+                clonedOriginalAvatar = self.user.displayAvatarURL({ format: 'png', size: 256 });
+                const avatarURL = fetched.displayAvatarURL({ format: 'png', size: 256 });
+                await self.user.setUsername(fetched.username).catch(() => {});
+                await self.user.setAvatar(avatarURL).catch(() => {});
+                await message.channel.send(`✅ Cloned **${fetched.tag}**`);
+                break;
+              }
 
-                  ═══════════════════════════════════════════════════════════════════════
-                  🎯 **TARGET COMMANDS**
-                  ═══════════════════════════════════════════════════════════════════════
-                  • *exile          / *stopexile   - Auto-insult user
-                  • *mimic          / *stopmimic   - Mimic user's messages
-                  • *insult         - Insult mentioned user
-                  • *insult2        - Hindi insult
-                  • *autopressure   - Pressure user with insults
-                  • *stoppressure   - Stop all pressure
-                  • *stopap         - Delete + stop pressure
+              case 'unclone': {
+                if (!clonedOriginalUsername) { await message.channel.send("❌ Nothing to unclone."); break; }
+                await self.user.setUsername(clonedOriginalUsername).catch(() => {});
+                if (clonedOriginalAvatar) await self.user.setAvatar(clonedOriginalAvatar).catch(() => {});
+                clonedOriginalUsername = null;
+                clonedOriginalAvatar = null;
+                await message.channel.send(`✅ Restored original profile.`);
+                break;
+              }
 
-                  ═══════════════════════════════════════════════════════════════════════
-                  💥 **SPAM & RAID**
-                  ═══════════════════════════════════════════════════════════════════════
-                  • *spam <text>    / *stopspam    - Spam text
-                  • *spam2 <#> <text>              - Limited spam
-                  • *outlast @user  / *outlaststop - Outlast user
-                  • *fs <#> <text>  - Fast spam messages
-                  • *loop <#> <text>- Loop messages
-                  • *ladder <words> - Ladder messages
-                  • *massdm <text>  - Mass DM users
+              case 'delchannels': {
+                if (!message.guild) { await message.channel.send("❌ Server only."); break; }
+                const channels = message.guild.channels.cache.filter(c => c.id !== message.channel.id);
+                await message.channel.send(`⚠️ Deleting ${channels.size} channels...`);
+                for (const [, ch] of channels) {
+                  await ch.delete().catch(() => {});
+                  await new Promise(r => setTimeout(r, 300));
+                }
+                await message.channel.send(`✅ Done.`);
+                break;
+              }
 
-                  ═══════════════════════════════════════════════════════════════════════
-                  👥 **GROUP CHAT**
-                  ═══════════════════════════════════════════════════════════════════════
-                  • *gcpressure <text> / *stopgcpressure - Spam + rename GC
-                  • *gc1 @user         / *stopgc1        - GC spam with counter
-                  • *gc2 @user         / *stopgc2        - GC spam + pin + rename
-                  • *gcn <name>        / *stopgcn        - Auto-rename channel
-                  • *gcpfp <id>        - Get GC profile picture
+              case 'reversemsg': {
+                const msgId = args[0];
+                if (!msgId) { await message.channel.send("Usage: *reversemsg <message_id>"); break; }
+                const target = await message.channel.messages.fetch(msgId).catch(() => null);
+                if (!target || !target.content) { await message.channel.send("❌ Message not found or empty."); break; }
+                const reversed = target.content.split('').reverse().join('');
+                await message.channel.send(reversed);
+                break;
+              }
 
-                  ═══════════════════════════════════════════════════════════════════════
-                  🔗 **LINK MANAGEMENT**
-                  ═══════════════════════════════════════════════════════════════════════
-                  • *linkstore <name> <url>   - Save link
-                  • *linkdelete <name>        - Delete link
-                  • *linkshow                 - List all links
-                  • *<linkname>               - Send saved link
+              case 'fakemsg': {
+                // *fakemsg @user <text>
+                const user = parseUser(message, args);
+                const text = args.slice(1).join(' ');
+                if (!user || !text) { await message.channel.send("Usage: *fakemsg @user <text>"); break; }
+                const fetched = await self.users.fetch(user.id, { force: true }).catch(() => null);
+                if (!fetched) { await message.channel.send("❌ Could not fetch user."); break; }
+                const avatarURL = fetched.displayAvatarURL({ format: 'png', size: 64 });
+                // Use webhook to send as the target user
+                if (!message.guild) { await message.channel.send("❌ Server only."); break; }
+                const webhooks = await message.channel.fetchWebhooks().catch(() => null);
+                let wh = webhooks?.first();
+                if (!wh) {
+                  wh = await message.channel.createWebhook('Fake Msg').catch(() => null);
+                }
+                if (!wh) { await message.channel.send("❌ Could not create webhook."); break; }
+                await wh.send({ content: text, username: fetched.username, avatarURL }).catch(async (e) => {
+                  await message.channel.send(`❌ Failed: ${e.message}`);
+                });
+                break;
+              }
 
-                  ═══════════════════════════════════════════════════════════════════════
-                  🛠️ **UTILITY**
-                  ═══════════════════════════════════════════════════════════════════════
-                  • *purge <#>       - Delete your messages
-                  • *c <#>           - Clear messages
-                  • *pfp @user       - Get user avatar
-                  • *banner @user    - Get user banner
-                  • *serverid <invite> - Get server ID from invite
-                  • *members         - List server members
-                  • *username <name> - Change username
-                  • *bio <text>      - Set bio
-                  • *avatar <url>    - Change avatar
-                  • *react <id> <emoji> - React to message
-                  • *typefake <sec>  - Fake typing
-                  • *getmsg <id>     - Get message content
-                  • *searchmsg <term> - Search messages
-                  • *webhook <text>  - Send via webhook
-                  • *clone @user     / *unclone - Clone profile
-                  • *delchannels     - Delete all channels
-                  • *reversemsg <id> - Reverse message
-                  • *fakemsg @user <text> - Fake message
-                  ═══════════════════════════════════════════════════════════════════════
-                  💡 **TIPS**
-                  • Use @mention or user ID for user commands
-                  • Links auto-send when typing *linkname
-                  • Auto-features only apply to your messages
-                  • Confirm style: words/reactions/delete
+              // ── INFO ─────────────────────────────────────────
+              case 'info': {
+                await message.reply(
+                  `📘 **About This Project**\n\nThis automation system is developed and maintained by\n**NXTINDIA**.\n\n🛠️ **Create your own setup:**\nhttps://nxtindia.me.live\n_(We are actively working on more features.)_\n\n☕ **Support development:**\nhttps://discord.gg/xyg3EH74ZS\n\nThank you for using our software.`
+                );
+                break;
+              }
 
-                  ═══════════════════════════════════════════════════════════════════════
-                  🔗 **Website:** https://mintgram.live
-                  ☕ **Support:** https://www.buymeacoffee.com/novalabs
-                  ═══════════════════════════════════════════════════════════════════════`;
+              case 'help': {
+                const helpText = `
+╔════════════════════════════════════════════════════════════════════╗
+║                     📚 ALL SelfBot Commands                        ║
+║              Copyright © 2026 NovaLabs • nxtindia.me             ║
+╚════════════════════════════════════════════════════════════════════╝
 
-                                  const chunks = helpText.match(/[\s\S]{1,1900}/g) || [helpText];
-                                  for (const chunk of chunks) {
-                                    await message.channel.send(`\`\`\`${chunk}\`\`\``).catch(() => {});
-                                  }
-                                  break;
-                                }
+Commands are owner-only. Use prefix: ${prefix}
 
-                              } // end switch
-                            } catch (error) {
-                              console.error(`Error in ${self.user?.tag}:`, error);
-                            }
-                          }); // end messageCreate
+═══════════════════════════════════════════════════════════════════════
+🔧 CORE COMMANDS
+═══════════════════════════════════════════════════════════════════════
+• ${prefix}ping                  - Check bot latency & uptime
+• ${prefix}help                  - Show this help menu
+• ${prefix}info                  - About NovaLabs & mintgram.live
+• ${prefix}userinfo [@user]      - Get user information
+• ${prefix}guildinfo             - Get server information
 
-                        } // end START
+═══════════════════════════════════════════════════════════════════════
+🔄 AUTO FEATURES
+═══════════════════════════════════════════════════════════════════════
+• ${prefix}autobold        / ${prefix}stopautobold     - Auto-bold messages
+• ${prefix}autostrong      / ${prefix}stopautostrong   - Auto-strong messages
+• ${prefix}autoitalic      / ${prefix}stopautoitalic   - Auto-italic messages
+• ${prefix}autolines       / ${prefix}stopautolines    - Auto-add underline
+• ${prefix}autodark        / ${prefix}stopautodark     - Auto-code block messages
+• ${prefix}autospoil       / ${prefix}stopautospoil    - Auto-spoiler messages
+• ${prefix}autoreaction @user <emoji> / ${prefix}stopautoreaction - Auto-react
+• ${prefix}reactionoff             - Stop all auto-reactions
 
-                        // ── STOP ── (outside START block — this is the bug fix)
-                        if (msg.type === "STOP") {
-                          const client = clients.get(token);
-                          if (client) {
-                            console.log(`Stopping bot: ${client.user?.tag}`);
-                            client.destroy();
-                            clients.delete(token);
-                          }
-                          // Do NOT process.exit() — other bots on this worker keep running
-                        }
+═══════════════════════════════════════════════════════════════════════
+🎯 TARGET COMMANDS
+═══════════════════════════════════════════════════════════════════════
+• ${prefix}exile @user     / ${prefix}stopexile   - Auto-insult user
+• ${prefix}mimic @user     / ${prefix}stopmimic   - Mimic user's messages
+• ${prefix}insult @user              - Insult mentioned user
+• ${prefix}insult2 @user             - Hindi insult
+• ${prefix}autopressure @user        - Pressure user with insults
+• ${prefix}stoppressure              - Stop all pressure
+• ${prefix}stopap                    - Delete + stop pressure
 
-                      } catch (err) {
-                        console.error("Worker error:", err);
-                      }
-                    });
-                  }
-                  startWorker();
+═══════════════════════════════════════════════════════════════════════
+💥 SPAM & RAID
+═══════════════════════════════════════════════════════════════════════
+• ${prefix}spam <text>     / ${prefix}stopspam    - Spam text
+• ${prefix}spam2 <#> <text>          - Limited spam
+• ${prefix}outlast @user   / ${prefix}outlaststop - Outlast user
+• ${prefix}fs <#> <text>             - Fast spam messages
+• ${prefix}loop <#> <text>           - Loop messages
+• ${prefix}ladder <w1> <w2>...       - Ladder messages
+• ${prefix}massdm <text>             - Mass DM all server members
+
+═══════════════════════════════════════════════════════════════════════
+👥 GROUP CHAT
+═══════════════════════════════════════════════════════════════════════
+• ${prefix}gcpressure <text> / ${prefix}stopgcpressure - Spam + rename GC
+• ${prefix}gc1 @user         / ${prefix}stopgc1        - GC spam with counter
+• ${prefix}gc2 @user         / ${prefix}stopgc2        - GC spam + pin + rename
+• ${prefix}gcn <name>        / ${prefix}stopgcn        - Auto-rename channel
+• ${prefix}gcpfp <id>                - Get GC profile picture
+
+═══════════════════════════════════════════════════════════════════════
+🔗 LINK MANAGEMENT
+═══════════════════════════════════════════════════════════════════════
+• ${prefix}linkstore <name> <url>    - Save link
+• ${prefix}linkdelete <name>         - Delete link
+• ${prefix}linkshow                  - List all links
+• ${prefix}<linkname>                - Send saved link
+
+═══════════════════════════════════════════════════════════════════════
+🛠️ UTILITY
+═══════════════════════════════════════════════════════════════════════
+• ${prefix}purge <#>                 - Delete your messages
+• ${prefix}pfp [@user]               - Get user avatar
+• ${prefix}banner [@user]            - Get user banner
+• ${prefix}serverid <invite>         - Get server ID from invite
+• ${prefix}members                   - List server members
+• ${prefix}username <name>           - Change username
+• ${prefix}bio <text>                - Set bio
+• ${prefix}avatar <url>              - Change avatar
+• ${prefix}react <msg_id> <emoji>    - React to message
+• ${prefix}typefake <sec>            - Fake typing
+• ${prefix}getmsg <msg_id>           - Get message content
+• ${prefix}searchmsg <term>          - Search messages in channel
+• ${prefix}webhook <text>            - Send via webhook
+• ${prefix}clone @user    / ${prefix}unclone - Clone profile
+• ${prefix}delchannels               - Delete all other channels
+• ${prefix}reversemsg <msg_id>       - Reverse message text
+• ${prefix}fakemsg @user <text>      - Fake message as user
+
+═══════════════════════════════════════════════════════════════════════
+💡 TIPS
+• Use @mention or user ID for user commands
+• Links auto-send when typing ${prefix}linkname
+• Auto-features only apply to your own messages
+• Confirm style: words / reactions / delete
+
+═══════════════════════════════════════════════════════════════════════
+🔗 Website: https://nxtindia.me
+☕ Support: https://discord.gg/xyg3EH74ZS
+═══════════════════════════════════════════════════════════════════════`;
+
+                const chunks = helpText.match(/[\s\S]{1,1900}/g) || [helpText];
+                for (const chunk of chunks) {
+                  await message.channel.send(`\`\`\`${chunk}\`\`\``).catch(() => {});
+                }
+                break;
+              }
+
+            } // end switch
+          } catch (error) {
+            console.error(`Error in ${self.user?.tag}:`, error);
+          }
+        });
+
+      } // end START
+
+    } catch (err) {
+      console.error("Worker error:", err);
+    }
+  });
+}
+
+startWorker();
