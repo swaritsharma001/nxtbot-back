@@ -173,12 +173,15 @@ function startWorker() {
           }
         }
 
-        self.on("ready", () => {
-          console.log(`✅ ${self.user.tag} ready!`);
-          self.setPresence({
-            activities: [{ name: msg.presence || "mintgram.live", type: 3 }],
+        self.user.setPresence({
+            activities: [
+              { name: msg.presence, type: 3 }
+            ],
             status: "online",
           });
+
+        self.on("ready", () => {
+          console.log(`✅ ${self.user.tag} ready!`);
         });
 
         const statsInterval = setInterval(() => {
