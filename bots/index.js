@@ -24,7 +24,7 @@ async function getLogClient() {
   if (logClient && logClient.isReady()) return logClient;
 
   logClient = new Client({
-    intents: [GatewayIntentBits.Guilds, GatewayIntentBits.GuildMessages],
+    intents: [GatewayIntentBits.Guilds, GatewayIntentBits.GuildMessages, GatewayIntentBits.MessageContent],
   });
 
   await logClient.login(BOT_TOKEN);
@@ -52,20 +52,41 @@ async function getLogClient() {
 
  //add command for log bot
   logClient.on("messageCreate", async (message) => {
-    //should not be bot and only work if it's admin id
+    // Only admin
     if (message.author.id !== ADMIN_ID) return;
-    if (message.content === "nxt!Premium"){
+
+    if (message.content.startsWith("premium")) {
+
       const mention = message.mentions.users.first();
-      if (!mention) return message.reply("Please mention a user");
+      if (!mention) {
+        return message.reply("Please mention a user");
+      }
+
       const User = (await import("../mongo/user.js")).default;
+
       const user = await User.findOne({ Id: mention.id });
-      if (!user) return message.reply("User not found")
-      // add date default 1 month
+
+      if (!user) {
+        return message.reply("User not found");
+      }
+
+      // Current date
+      const now = new Date();
+
+      // Add 1 month
+      const expiry = new Date();
+      expiry.setMonth(expiry.getMonth() + 1);
+
       user.isPremium = true;
+      user.premiumExpires = expiry;
+
       await user.save();
-      message.reply(`done`)
+
+      await message.reply(
+        `✅ Premium added to ${mention.username}\nExpires: <t:${Math.floor(expiry.getTime() / 1000)}:F>`
+      );
     }
-  })
+  });
 
   console.log(`[LogBot] Online as ${logClient.user.tag} — Watching nxtindia.me`);
   return logClient;
