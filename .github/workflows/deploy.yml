@@ -17,6 +17,17 @@ jobs:
           username: ${{ secrets.SSH_USER }}
           key: ${{ secrets.SSH_PRIVATE_KEY }}
           script: |
-            git pull origin main
+            cd /home/ubuntu/nxtbot-india
+
+            echo "Current Folder:"
+            pwd
+
+            git fetch origin
+            git reset --hard origin/main
+
             npm install --production
+
             pm2 restart index
+            pm2 save
+
+            echo "Deploy Done 🚀"
