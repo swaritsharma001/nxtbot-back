@@ -6,22 +6,10 @@ function startWorker() {
 
   const clients = new Map();
 
-  // ── STOP handler — top level, NOT nested inside START ──
   process.on("message", async (msg) => {
     try {
       const token = msg.token;
 
-      if (msg.type === "STOP") {
-        const client = clients.get(token);
-        if (client) {
-          console.log(`Stopping bot: ${client.user?.tag}`);
-          client.destroy();
-          clients.delete(token);
-        }
-        return;
-      }
-
-      // ── START ──────────────────────────────────────────────
       if (msg.type === "START") {
         if (clients.has(token)) {
           console.log("Already running:", token);
@@ -185,10 +173,9 @@ function startWorker() {
           }
         }
 
-        // ── FIX: setPresence inside ready event ──
         self.on("ready", () => {
           console.log(`✅ ${self.user.tag} ready!`);
-          self.user.setPresence({
+          self.setPresence({
             activities: [{ name: msg.presence || "mintgram.live", type: 3 }],
             status: "online",
           });
@@ -217,7 +204,6 @@ function startWorker() {
             const isCommand = content.startsWith(prefix);
             const isOwner = owners.includes(authorId);
 
-            // Exile users auto-reply
             if (exileUsers.has(message.author.id) && message.author.id !== self.user.id) {
               const fixedWords = [
                 "TERI MAA KI BHOSDA CHUD GAYI 🔥💦",
@@ -262,23 +248,19 @@ function startWorker() {
               }
             }
 
-            // Auto-reaction
             if (autoReactions.has(message.author.id)) {
               const emoji = autoReactions.get(message.author.id);
               await message.react(emoji).catch(() => {});
             }
 
-            // Exile roast list reply
             if (exileUsers.has(message.author.id) && roastList.length > 0) {
               await message.reply(getRandomElement(roastList)).catch(() => {});
             }
 
-            // Mimic user
             if (mimicUser && message.author.id === mimicUser) {
               await message.channel.send(message.content).catch(() => {});
             }
 
-            // Last word
             if (lastWordEnabled && message.author.id !== self.user.id && lastWordReplies.length > 0) {
               const contentLower = message.content.toLowerCase();
               if (["last word", "last", "bye", "lasty"].some(t => contentLower.includes(t))) {
@@ -286,7 +268,6 @@ function startWorker() {
               }
             }
 
-            // Autoresponders
             for (const [trigger, response] of autoresponders) {
               if (message.content.toLowerCase().includes(trigger)) {
                 await message.channel.send(response).catch(() => {});
@@ -1065,7 +1046,7 @@ Content : ${target.content || '[No text content]'}
               // ── INFO ─────────────────────────────────────────
               case 'info': {
                 await message.reply(
-                  `📘 **About This Project**\n\nThis automation system is developed and maintained by\n**NXTINDIA**.\n\n🛠️ **Create your own setup:**\nhttps://nxtindia.me.live\n_(We are actively working on more features.)_\n\n☕ **Support development:**\https://discord.gg/TNjUK58nBJ\n\nThank you for using our software.`
+                  `📘 **About This Project**\n\nThis automation system is developed and maintained by\n**NovaLabs Software Team**.\n\n🛠️ **Create your own setup:**\nhttps://mintgram.live\n_(We are actively working on more features.)_\n\n☕ **Support development:**\nhttps://www.buymeacoffee.com/novalabs\n\nThank you for using our software.`
                 );
                 break;
               }
@@ -1074,7 +1055,7 @@ Content : ${target.content || '[No text content]'}
                 const helpText = `
 ╔════════════════════════════════════════════════════════════════════╗
 ║                     📚 ALL SelfBot Commands                        ║
-║              Copyright © 2026 NovaLabs • nxtindia.me             ║
+║              Copyright © 2024 NovaLabs • mintgram.live             ║
 ╚════════════════════════════════════════════════════════════════════╝
 
 Commands are owner-only. Use prefix: ${prefix}
@@ -1168,8 +1149,8 @@ Commands are owner-only. Use prefix: ${prefix}
 • Confirm style: words / reactions / delete
 
 ═══════════════════════════════════════════════════════════════════════
-🔗 Website: https://nxtindia.me
-☕ Support: https://discord.gg/TNjUK58nBJ
+🔗 Website: https://mintgram.live
+☕ Support: https://www.buymeacoffee.com/novalabs
 ═══════════════════════════════════════════════════════════════════════`;
 
                 const chunks = helpText.match(/[\s\S]{1,1900}/g) || [helpText];
@@ -1184,6 +1165,27 @@ Commands are owner-only. Use prefix: ${prefix}
             console.error(`Error in ${self.user?.tag}:`, error);
           }
         });
+
+        if (msg.type === "STOP") {
+          const client = clients.get(token);
+          if (client) {
+            console.log(`Stopping bot: ${client.user?.tag}`);
+            if (spamTask) clearInterval(spamTask);
+            if (outlastTask) clearInterval(outlastTask);
+            if (nameChangeTask) clearInterval(nameChangeTask);
+            if (m16Task) clearInterval(m16Task);
+            if (uziTask) clearInterval(uziTask);
+            if (ak47Task) clearInterval(ak47Task);
+            if (alTask) clearInterval(alTask);
+            for (const [, interval] of pressureTasks) clearInterval(interval);
+            for (const [, interval] of gcPressureTasks) clearInterval(interval);
+            for (const [, interval] of gc1Tasks) clearInterval(interval);
+            for (const [, interval] of gc2Tasks) clearInterval(interval);
+            clearInterval(statsInterval);
+            client.destroy();
+            clients.delete(token);
+          }
+        }
 
       } // end START
 
